@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // This is set at build time via -ldflags magic
@@ -221,6 +222,7 @@ func init() {
 		panic(tempDirErr)
 	}
 }
+var wg sync.WaitGroup
 
 func main() {
 
@@ -235,6 +237,22 @@ func main() {
 	if err != nil {
 		handleError(clause, hosts, err)
 	}
+
+	results := make(map[string]string)
+	for _, h := range hosts {
+		wg.Add(1)
+		var ho = h
+		go func() {
+			result, _ := simpleBuild(deployment, ho)
+			results[ho.Name] = result
+		}()
+	}
+	wg.Wait()
+	for _, r := range results {
+		fmt.Print(r)
+	}
+
+	os.Exit(0)
 
 	switch clause {
 	case build.FullCommand():
@@ -262,6 +280,18 @@ func main() {
 	}
 
 	assets.Teardown(assetRoot)
+}
+
+func simpleBuild(deployment string, host nix.Host) (string, error) {
+	defer wg.Done()
+
+	deploymentPath, err := filepath.Abs(deployment)
+	if err != nil {
+		return "", err
+	}
+
+	ctx := getNixContext()
+	return ctx.Build(deploymentPath, host)
 }
 
 func handleError(cmd string, hosts []nix.Host, err error) {

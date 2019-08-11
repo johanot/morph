@@ -21,6 +21,7 @@ type Host struct {
 	HealthChecks healthchecks.HealthChecks
 	Name         string
 	NixosRelease string
+	Deployment	 string
 	TargetHost   string
 	Secrets      map[string]secrets.Secret
 	BuildOnly    bool
@@ -103,8 +104,8 @@ func (host *Host) Reboot(sshContext *ssh.SSHContext) error {
 func (ctx *NixContext) GetMachines(deploymentPath string) (hosts []Host, err error) {
 
 	args := []string{"eval",
-		"-f", ctx.EvalMachines, "info.machineList",
-		"--arg", "networkExpr", deploymentPath,
+		"-f", ctx.EvalMachines, "info.hosts",
+		"--arg", "deployment", deploymentPath,
 		"--json"}
 
 	if ctx.ShowTrace {
@@ -132,6 +133,28 @@ func (ctx *NixContext) GetMachines(deploymentPath string) (hosts []Host, err err
 
 	return hosts, nil
 }
+
+func (ctx *NixContext) Build(deploymentPath string, host Host) (resultPath string, err error) {
+
+	/*args := []string{"eval", "--raw", "-f", ctx.EvalMachines,
+		"--arg", "deployment", deploymentPath,
+		"--argstr", "hostname", host.Name,
+		"--option", "extra-substituters", "https://nix-cache.dbc.dk/",
+		"nixos.config.system.build.toplevel.drvPath"}*/
+
+	args := []string{ctx.EvalMachines,
+		"--arg", "deployment", deploymentPath,
+		"--argstr", "hostname", host.Name,
+		"--option", "extra-substituters", "https://nix-cache.dbc.dk/",
+		"-A", "nixos.config.system.build.toplevel"}
+
+	cmd := exec.Command("nix-build", args...)
+
+	// show process output on attached stdout/stderr
+	out, e := cmd.Output()
+	return string(out), e
+}
+
 
 func (ctx *NixContext) BuildMachines(deploymentPath string, hosts []Host, nixArgs []string, nixBuildTargets string) (resultPath string, err error) {
 	hostsArg := "["
